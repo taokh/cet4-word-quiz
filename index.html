@@ -1491,6 +1491,7 @@ const WORDS = parseWords(RAW_WORDS);
  * wordStatus = { 单词: 状态 }
  * =================================================================== */
 const STORAGE_KEY = 'cet4_word_status';
+const SEEN_KEY = 'cet4_seen_in_round';
 
 function loadStatus() {
   try {
@@ -1514,7 +1515,30 @@ function saveStatus() {
   }
 }
 
+// 从 localStorage 恢复本轮已出过的单词集合
+function loadSeenInRound() {
+  try {
+    const data = localStorage.getItem(SEEN_KEY);
+    if (!data) return new Set();
+    const parsed = JSON.parse(data);
+    if (Array.isArray(parsed)) return new Set(parsed);
+    return new Set();
+  } catch (e) {
+    console.warn('localStorage 读取本轮记录失败', e);
+    return new Set();
+  }
+}
+
+function saveSeenInRound() {
+  try {
+    localStorage.setItem(SEEN_KEY, JSON.stringify([...seenInRound]));
+  } catch (e) {
+    console.warn('localStorage 写入本轮记录失败', e);
+  }
+}
+
 let wordStatus = loadStatus();
+let seenInRound = loadSeenInRound();  // 本轮已出过的单词，避免一轮内重复
 
 // 获取某单词状态（默认 0 未学习）
 function getStatus(word) {
@@ -1528,7 +1552,6 @@ function getStatus(word) {
 let mode = 'all';
 let currentWord = null;   // 当前题目单词对象
 let answered = false;     // 当前题是否已作答（防止重复点击）
-let seenInRound = new Set();  // 本轮已出过的单词，避免一轮内重复
 
 // 根据当前模式取出可出题的单词池（排除本轮已出过的；若全部出过则开新一轮）
 function getPool() {
@@ -1542,6 +1565,7 @@ function getPool() {
   // 本轮已全部出过且池非空：开启新一轮
   if (pool.length === 0 && base.length > 0) {
     seenInRound.clear();
+    saveSeenInRound();
     pool = base.slice();
   }
   return pool;
@@ -1579,6 +1603,7 @@ function nextQuestion() {
   // 随机取目标单词，并标记本轮已出过
   currentWord = pool[Math.floor(Math.random() * pool.length)];
   seenInRound.add(currentWord.word);
+  saveSeenInRound();
   answered = false;
 
   // 从其他单词中随机取 3 条释义做干扰项
@@ -1690,6 +1715,7 @@ function switchMode(newMode) {
   if (mode === newMode) return;
   mode = newMode;
   seenInRound.clear();   // 切换模式视为开启新一轮
+  saveSeenInRound();
   document.getElementById('modeAll').classList.toggle('active', mode === 'all');
   document.getElementById('modeUnknown').classList.toggle('active', mode === 'unknown');
   nextQuestion();
@@ -1702,6 +1728,7 @@ function resetAll() {
   seenInRound.clear();
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SEEN_KEY);
   } catch (e) {
     console.warn('localStorage 清除失败', e);
   }

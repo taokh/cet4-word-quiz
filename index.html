@@ -1528,13 +1528,23 @@ function getStatus(word) {
 let mode = 'all';
 let currentWord = null;   // 当前题目单词对象
 let answered = false;     // 当前题是否已作答（防止重复点击）
+let seenInRound = new Set();  // 本轮已出过的单词，避免一轮内重复
 
-// 根据当前模式取出可出题的单词池
+// 根据当前模式取出可出题的单词池（排除本轮已出过的；若全部出过则开新一轮）
 function getPool() {
+  let base;
   if (mode === 'unknown') {
-    return WORDS.filter(w => getStatus(w.word) !== 1);
+    base = WORDS.filter(w => getStatus(w.word) !== 1);
+  } else {
+    base = WORDS;
   }
-  return WORDS;
+  let pool = base.filter(w => !seenInRound.has(w.word));
+  // 本轮已全部出过且池非空：开启新一轮
+  if (pool.length === 0 && base.length > 0) {
+    seenInRound.clear();
+    pool = base.slice();
+  }
+  return pool;
 }
 
 // 数组随机打乱（Fisher-Yates 洗牌）
@@ -1566,8 +1576,9 @@ function nextQuestion() {
     return;
   }
 
-  // 随机取目标单词
+  // 随机取目标单词，并标记本轮已出过
   currentWord = pool[Math.floor(Math.random() * pool.length)];
+  seenInRound.add(currentWord.word);
   answered = false;
 
   // 从其他单词中随机取 3 条释义做干扰项
@@ -1678,6 +1689,7 @@ function updateStats() {
 function switchMode(newMode) {
   if (mode === newMode) return;
   mode = newMode;
+  seenInRound.clear();   // 切换模式视为开启新一轮
   document.getElementById('modeAll').classList.toggle('active', mode === 'all');
   document.getElementById('modeUnknown').classList.toggle('active', mode === 'unknown');
   nextQuestion();
@@ -1687,6 +1699,7 @@ function switchMode(newMode) {
 function resetAll() {
   if (!confirm('确定要清空全部学习状态吗？此操作不可恢复。')) return;
   wordStatus = {};
+  seenInRound.clear();
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch (e) {
